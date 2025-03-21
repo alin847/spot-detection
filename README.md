@@ -4,7 +4,7 @@
 Detects spots in a grayscale image by using the a trous wavelet transform described in [Olivo-Marin (2002)](doi.org/10.1016/S0031-3203(01)00127-3). Performs localization using the radial symmetry method described in [Parthasarathy (2012)](doi.org/10.1038/nmeth.2071).
 
 ## Procedure
-The general procedure to obtain the spot locations is as follows:
+The general procedure to obtain the spot locations is as follows. Look at example.py for guidance.
   1. Create a CellDetection Object. Image must be in grayscale for the code to work.
   2. Call spot_detection(scales, threshold) function.
      * **scales** is the number of times the wavelet decomposition is performed. For larger spots, choose a larger integer for scales. 
