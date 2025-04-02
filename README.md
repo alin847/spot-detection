@@ -1,7 +1,7 @@
 # spot-detection
 
 ## Description
-Detects spots in a grayscale image by using the a trous wavelet transform described in [Olivo-Marin (2002)](doi.org/10.1016/S0031-3203(01)00127-3). Performs localization using the radial symmetry method described in [Parthasarathy (2012)](doi.org/10.1038/nmeth.2071).
+Detects spots in a grayscale image by using a modified version of the a trous wavelet transform described in [Olivo-Marin (2002)](doi.org/10.1016/S0031-3203(01)00127-3). Performs localization using the radial symmetry method described in [Parthasarathy (2012)](doi.org/10.1038/nmeth.2071).
 
 ## Procedure
 Run "pip install -r requirements.txt" on your terminal if you don't have the following libraries: numpy, cv2, scipy, and skimage.
