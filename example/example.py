@@ -2,7 +2,7 @@ import cv2
 from SpotDetection import SpotDetection
 
 
-# Step 1: create CellDetection Object
+# Step 1: create SpotDetection Object
 gray_image = cv2.imread("example.tif", cv2.IMREAD_ANYDEPTH)
 image = SpotDetection(gray_image=gray_image)
 
