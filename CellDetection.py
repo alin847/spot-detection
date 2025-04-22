@@ -296,19 +296,3 @@ class CellDetection:
 
         return color_image
 
-if __name__ == "__main__":
-    gray_image = cv2.imread("test.jpeg", cv2.IMREAD_GRAYSCALE)
-    gray_image = cv2.bitwise_not(gray_image)
-    start = time.time()
-    image = CellDetection(gray_image)
-
-    binary_image = image.spot_detection(scales=3, threshold=2)
-    # cv2.imshow("binary", binary_image)
-    # cv2.waitKey(0)
-
-    image.localization(region_size=15, min_distance=5)
-    end = time.time()
-    print(end-start)
-    color_image = image.view_locations(auto=False)
-    # cv2.imshow("color", color_image)
-    # cv2.waitKey(0)
