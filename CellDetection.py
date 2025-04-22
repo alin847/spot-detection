@@ -1,9 +1,8 @@
 import cv2
 import numpy as np
 from scipy.stats import median_abs_deviation
-from scipy.ndimage import convolve
 from skimage.feature import peak_local_max
-
+import time
 
 class CellDetection:
     def __init__(self, gray_image):
@@ -23,6 +22,7 @@ class CellDetection:
 
 
     # MAIN FUNCTIONS
+
     def spot_detection(self, scales, threshold=4.5):
         """
         Utilizes the a_trou_transform method to detect spots. It filters
@@ -65,9 +65,7 @@ class CellDetection:
                 kernel_1D = np.array([kernel_values])
                 kernel_2D = np.dot(np.transpose(kernel_1D), kernel_1D)
 
-                smooth_approximation = convolve(
-                    previous_approximation, kernel_2D, mode="mirror"
-                )
+                smooth_approximation = cv2.filter2D(previous_approximation, -1, kernel_2D)
                 wavelet_planes[i] = np.subtract(
                     previous_approximation, smooth_approximation
                 )
@@ -172,77 +170,53 @@ class CellDetection:
             jc: j coordinate of the particle's center
             """
 
-            def calc_mk(i, j):
-                """
-                Calculates mk of the bottom right of (i,j)
-                """
-                if (
-                    (image_patch[i, j + 1] - image_patch[i + 1, j])
-                    - (image_patch[i, j] - image_patch[i + 1, j + 1])
-                ) == 0:
-                    if (image_patch[i, j + 1] - image_patch[i + 1, j]) < 0:
-                        mk = -(10**10)
-                    else:
-                        mk = 10**10
-                else:
-                    mk = (
-                        (image_patch[i, j + 1] - image_patch[i + 1, j])
-                        + (image_patch[i, j] - image_patch[i + 1, j + 1])
-                    ) / (
-                        (image_patch[i, j + 1] - image_patch[i + 1, j])
-                        - (image_patch[i, j] - image_patch[i + 1, j + 1])
-                    )
-                return mk
+            def mk_and_gradient(image_patch):
+                """calculates mk and gradient"""
+                top_left = image_patch[:-1, :-1]
+                top_right = image_patch[:-1, 1:]
+                bottom_left = image_patch[1:, :-1]
+                bottom_right = image_patch[1:, 1:]
 
-            def calc_gradient(i, j):
-                """
-                Calculates gradient of the bottom right of (i,j)
-                """
-                nabla_Ik = (image_patch[i, j + 1] - image_patch[i + 1, j]) ** 2 + (
-                    image_patch[i, j] - image_patch[i + 1, j + 1]
-                ) ** 2
-                return nabla_Ik ** (1 / 2)
+                u_hat = top_right - bottom_left
+                v_hat = top_left - bottom_right
+                
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    mk = (u_hat + v_hat) / (u_hat - v_hat)
+                
+                mk = np.where(mk == -np.inf, -1e10, mk)
+                mk = np.where(mk == np.inf, 1e10, mk)
+                mk = np.where(np.isnan(mk), 0, mk)
+
+                nabla_I = (u_hat**2 + v_hat**2) ** (1/2)
+                return np.ravel(mk), np.ravel(nabla_I)
 
             image_patch = image_patch.astype(float)
             region_size = image_patch.shape[0]
-            n = (
-                region_size - 1
-            ) ** 2  # n refers to the length of the following variables
-
-            # initializing variables
-            m = np.zeros(n)  # slope
-            nabla_I = np.zeros(n)  # gradient
-            x = np.zeros(n)
-            y = np.zeros(n)
 
             # calculating m, nabla_I, x, y
-            k = 0
-            for i in range(region_size - 1):
-                for j in range(region_size - 1):
-                    m[k] = calc_mk(i, j)
-                    nabla_I[k] = calc_gradient(i, j)
-                    x[k] = j + 0.5
-                    y[k] = region_size - 1 - i - 0.5
-                    k += 1
+            m, nabla_I = mk_and_gradient(image_patch)
+            j_grid, i_grid = np.meshgrid(np.arange(region_size - 1), np.arange(region_size - 1))
+            x = j_grid.ravel() + 0.5
+            y = (region_size - 1 - i_grid - 0.5).ravel()
 
             # initial centroid guess
             xc = np.sum(x * nabla_I) / np.sum(nabla_I)
             yc = np.sum(y * nabla_I) / np.sum(nabla_I)
 
             # calculating weights
-            w = np.zeros(n)  # weights
             d_kc = ((x - xc) ** 2 + (y - yc) ** 2) ** 0.5  # distance to guess
             w = nabla_I**2 / d_kc
 
             # setting up system of equations
-            matrixA_1 = np.sum(-((m**2) * w) / (m**2 + 1))
-            matrixA_2 = np.sum((m * w) / (m**2 + 1))
-            matrixA_3 = np.sum(-(m * w) / (m**2 + 1))
-            matrixA_4 = np.sum(w / (m**2 + 1))
+            deominator = m**2 + 1
+            matrixA_1 = np.sum(-((m**2) * w) / deominator)
+            matrixA_2 = np.sum((m * w) / deominator)
+            matrixA_3 = np.sum(-(m * w) / deominator)
+            matrixA_4 = np.sum(w / deominator)
             matrixA = np.array([[matrixA_1, matrixA_2], [matrixA_3, matrixA_4]])
 
-            matrixB_1 = np.sum((m * w * (y - m * x)) / (m**2 + 1))
-            matrixB_2 = np.sum((w * (y - m * x)) / (m**2 + 1))
+            matrixB_1 = np.sum((m * w * (y - m * x)) / deominator)
+            matrixB_2 = np.sum((w * (y - m * x)) / deominator)
             matrixB = np.array([[matrixB_1], [matrixB_2]])
 
             # solving system of equations
@@ -255,9 +229,9 @@ class CellDetection:
         # MAIN
         cell_locations = []
         centroids = get_centroids(self.binary_image, min_distance)
-
+        blurred_image = cv2.blur(self.gray_image, (5,5))
         for i, j in centroids:
-            local_region = extract_region(self.gray_image, (i, j), region_size)
+            local_region = extract_region(blurred_image, (i, j), region_size)
             ic, jc = radial_symmetry(local_region)
             ic += i - region_size // 2
             jc += j - region_size // 2
@@ -266,20 +240,75 @@ class CellDetection:
         return self.cell_locations
 
 
+    def spot_intensity(self):
+        """
+        Returns an array of the spot intensity in the order of spot location
+        """
+        intensities = []
+        blurred_image = cv2.blur(self.gray_image, (5,5))
+        for i, j in self.cell_locations:
+            intensities.append([blurred_image[round(i),round(j)]])
+        return np.array(intensities)
+
+
     def count(self):
         return self.cell_locations.shape[0]
 
 
-    def view_locations(self):
+    def view_locations(self, auto=False):
         """
         Returns the image with the cell locations overlaid.
+        When auto is True, it automatically adjust images brightness.
         """
-        color_image = cv2.cvtColor(
-            self.gray_image, cv2.COLOR_GRAY2RGB
-        )
-        color_image = color_image.astype(np.uint8)
+        def auto_adjust_brightness(image):
+            """
+            Given a grayscale image, it automatically adjusts its contrast and brightness.
+            Returns a new grayscale image (8-bit)
+            """
+            normalized = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX)
 
+            hist = cv2.calcHist([normalized], [0], None, [256], [0, 256])
+            cdf = hist.cumsum()
+            total_pixels = cdf[-1]
+
+            clip_pixels = total_pixels * 1 / 100.0  # change this number to adjust brightness
+            min_gray = np.searchsorted(cdf, clip_pixels)  # Lower limit
+            max_gray = np.searchsorted(cdf, total_pixels - clip_pixels)  # Upper limit
+
+            alpha = 255 / (max_gray - min_gray)
+            beta = -min_gray * alpha
+
+            adjusted = cv2.convertScaleAbs(normalized, alpha=alpha, beta=beta)
+            return adjusted
+        
+
+        if auto:
+            normalized = auto_adjust_brightness(self.gray_image)
+        else:
+            normalized = cv2.normalize(self.gray_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        
+        color_image = cv2.cvtColor(
+            normalized, cv2.COLOR_GRAY2RGB
+        )
+    
         for i, j in self.cell_locations:
             color_image[int(i), int(j)] = [0, 0, 255]
 
         return color_image
+
+if __name__ == "__main__":
+    gray_image = cv2.imread("test.jpeg", cv2.IMREAD_GRAYSCALE)
+    gray_image = cv2.bitwise_not(gray_image)
+    start = time.time()
+    image = CellDetection(gray_image)
+
+    binary_image = image.spot_detection(scales=3, threshold=2)
+    # cv2.imshow("binary", binary_image)
+    # cv2.waitKey(0)
+
+    image.localization(region_size=15, min_distance=5)
+    end = time.time()
+    print(end-start)
+    color_image = image.view_locations(auto=False)
+    # cv2.imshow("color", color_image)
+    # cv2.waitKey(0)
