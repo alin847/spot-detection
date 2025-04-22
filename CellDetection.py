@@ -2,16 +2,17 @@ import cv2
 import numpy as np
 from scipy.stats import median_abs_deviation
 from skimage.feature import peak_local_max
-import time
 
-class CellDetection:
+class SpotDetection:
     def __init__(self, gray_image):
         """
-        Creates a CellDetection object. The image must be grayscale.
+        Creates a SpotDetection object. The image must be grayscale.
         The general procedure to obtain the cell locations is as follows:
-        1. spot_detection(scales, threshold)
+        1. detection(scales, threshold)
         2. localization(region_size, min_distance)
-        3. view_locations()
+        3. spot_intensity() [optional]
+        4. count() [optional]
+        5. view_locations(auto)
 
         Inputs:
         gray_image: grayscale image (numpy array)
@@ -22,8 +23,7 @@ class CellDetection:
 
 
     # MAIN FUNCTIONS
-
-    def spot_detection(self, scales, threshold=4.5):
+    def detection(self, scales, threshold=4.5):
         """
         Utilizes the a_trou_transform method to detect spots. It filters
         the last wavelet plane by thresholding. If Wi(x,y) is less than
@@ -287,9 +287,7 @@ class CellDetection:
         else:
             normalized = cv2.normalize(self.gray_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         
-        color_image = cv2.cvtColor(
-            normalized, cv2.COLOR_GRAY2RGB
-        )
+        color_image = cv2.cvtColor(normalized, cv2.COLOR_GRAY2RGB)
     
         for i, j in self.cell_locations:
             color_image[int(i), int(j)] = [0, 0, 255]
